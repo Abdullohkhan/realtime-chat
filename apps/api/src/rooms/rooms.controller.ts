@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { JwtGuard } from '../auth/jwt.guard';
+import { JwtGuard, OptionalJwtGuard } from '../auth/jwt.guard';
 import { RoomsService } from './rooms.service';
 
 class CreateRoomDto {
@@ -13,18 +13,31 @@ class CreateRoomDto {
   title: string;
 }
 
-@Controller('rooms')
+class DirectDto {
+  @IsString()
+  @MaxLength(15)
+  username: string;
+}
+
+@Controller()
 export class RoomsController {
   constructor(private rooms: RoomsService) {}
 
-  @Get()
-  list() {
-    return this.rooms.list();
+  @UseGuards(OptionalJwtGuard)
+  @Get('rooms')
+  list(@Req() req: any) {
+    return this.rooms.list(req.user);
   }
 
   @UseGuards(JwtGuard)
-  @Post()
+  @Post('rooms')
   create(@Body() dto: CreateRoomDto) {
     return this.rooms.create(dto.slug, dto.title);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('dm')
+  direct(@Body() dto: DirectDto, @Req() req: any) {
+    return this.rooms.direct(req.user, dto.username);
   }
 }

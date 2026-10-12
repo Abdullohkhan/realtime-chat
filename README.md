@@ -7,15 +7,14 @@ Monorepo: **React + Vite** (frontend) va **NestJS + Prisma + PostgreSQL + Socket
 > o'zimizning NestJS API, interfeys Telegram uslubida va o'zbekchaga o'tkazilgan.
 
 ## Imkoniyatlar
-- Telegram uslubidagi UI + "liquid glass" (shaffof, xira panellar), qorong'i rejim, telefonda to'liq ekran
-- Xabarga javob berish (reply), o'z xabarini o'chirish (hammada darhol yo'qoladi)
-- "yozmoqda..." ko'rsatkichi va onlayn foydalanuvchilar soni
-- Real-vaqt xabarlar (Socket.IO), o'qilmagan xabarlar hisoblagichi
-- Bir nechta xona (chat), login qilganlar yangi xona yarata oladi
-- Email + parol bilan ro'yxatdan o'tish (JWT, bcrypt) yoki mehmon sifatida yozish
-- Ro'yxatdan o'tganlarda ✔ belgisi; mehmon band ismni ola olmaydi
-- Davlat bayrog'i, eski xabarlarni yuqoriga aylantirganda yuklash
-- Spamdan himoya (rate limit), kirish ma'lumotlarini tekshirish (class-validator)
+- Telegram uslubidagi UI (to'q ko'k / yorug' mavzu) + "liquid glass": suzuvchi pastki navigatsiya (Chatlar, Kontaktlar, Sozlamalar, Profil), papka tablari
+- Real-vaqt xabarlar (Socket.IO), o'qilmagan hisoblagich, "yozmoqda...", onlayn soni
+- **Telefon raqam bilan kirish**: 6 xonali kod Telegram'ga keladi (Telegram Gateway). Yoki email + parol (JWT, bcrypt)
+- **Shaxsiy (1:1) chatlar**: Kontaktlardan foydalanuvchini tanlab yoziladi; faqat ikki a'zo ko'radi
+- **Rasm yuborish** (faqat tizimga kirganlar): telefonda 1280px gacha kichraytiriladi, PostgreSQL'da saqlanadi
+- **Emoji reaksiyalar** (👍 ❤️ 😂 😮 😢 🔥), javob berish (reply), o'z xabarini o'chirish
+- Bir nechta ochiq xona; mehmon sifatida ham yozish mumkin (rasm/reaksiya/DM uchun login kerak)
+- Himoya: rate limit, kod 5 urinishdan keyin bloklanadi, fayl turi sarlavhadan emas, ichidan tekshiriladi
 - O'zbek / English interfeys (`apps/web/src/i18n.js`)
 
 ## Tuzilma
@@ -43,24 +42,38 @@ Test (haqiqiy bazada, `DATABASE_URL` kerak): `pnpm test`
 | O'zgaruvchi | Qayerda | Tavsif |
 |---|---|---|
 | `DATABASE_URL` | api | PostgreSQL manzili |
-| `JWT_SECRET` | api | Uzun tasodifiy qator (majburiy) |
+| `JWT_SECRET` | api | Kamida 32 belgi (majburiy). `openssl rand -base64 48` |
 | `CORS_ORIGIN` | api | Frontend manzili(lari), vergul bilan |
-| `PORT` | api | Standart 4000 |
-| `VITE_API_URL` | web | API manzili (build vaqtida) |
+| `TELEGRAM_GATEWAY_TOKEN` | api | Telefon orqali kirish uchun (pastga qarang) |
+| `PORT` | api | Railway o'zi beradi (lokal: 4000) |
+| `VITE_API_URL` | web | API manzili (build vaqtida o'qiladi) |
+
+## Telefon orqali kirish (Telegram Gateway)
+1. [gateway.telegram.org](https://gateway.telegram.org) da akkaunt oching, API token oling va hisobni to'ldiring (har bir kod pullik, narxini shu saytda ko'ring).
+2. Tokenni `TELEGRAM_GATEWAY_TOKEN` ga qo'ying.
+3. Kod faqat **Telegram'i bor raqamlarga** keladi. Kod 5 daqiqa amal qiladi, 45 soniyada bir marta qayta so'rash mumkin.
+
+Token yo'q bo'lsa lokal dev rejimda kod server logiga chiqadi (`[DEV] +998... uchun kod: 123456`). Production'da token bo'lmasa telefon orqali kirish o'chiq turadi, email+parol ishlaydi.
 
 ## JWT_SECRET yaratish
 ```bash
 openssl rand -base64 48        # Termux/Linux/Mac
 ```
 
-## Deploy (bepul variantlar)
-1. **Baza:** [Neon](https://neon.tech) yoki Railway'da PostgreSQL oching, `DATABASE_URL` ni oling.
-2. **API:** Render/Railway/Fly.io'da `apps/api` ni deploy qiling.
-   Build: `pnpm install && pnpm --filter api build`, Start: `pnpm --filter api start:prod`
-   (u avval `prisma migrate deploy` ni bajaradi). `JWT_SECRET`, `DATABASE_URL`, `CORS_ORIGIN` ni kiriting.
-   WebSocket qo'llab-quvvatlanishi kerak (Render/Railway/Fly'da bor).
-3. **Frontend:** Netlify/Vercel'da `apps/web`: build `pnpm build`, papka `dist`,
-   `VITE_API_URL` = API manzilingiz. (`_redirects` SPA uchun tayyor.)
+## Deploy: Railway
+Bitta Railway loyihasida 3 ta xizmat: **PostgreSQL**, **api**, **web**.
+
+1. **Baza:** New → Database → PostgreSQL.
+2. **API xizmati:** New → GitHub Repo (shu repo). Settings:
+   - *Config file path*: `/apps/api/railway.json` (root directory'ni o'zgartirmang, pnpm workspace kerak)
+   - Variables: `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`, `JWT_SECRET`, `TELEGRAM_GATEWAY_TOKEN`,
+     `CORS_ORIGIN` = web xizmatining manzili (masalan `https://suhbat-web.up.railway.app`)
+   - Networking → Generate Domain
+   - Jadvallar start paytida avtomatik yaratiladi (`prisma migrate deploy`).
+3. **Web xizmati:** xuddi shu repodan yana bir xizmat. *Config file path*: `/apps/web/railway.json`.
+   Variables: `VITE_API_URL` = API xizmatining manzili. Generate Domain.
+   (`VITE_API_URL` o'zgarsa web xizmatini qayta deploy qiling.)
+4. API'ning `CORS_ORIGIN` ga web manzilini qo'yib, API'ni qayta ishga tushiring.
 
 ## Litsenziya
 Apache-2.0 (`License` fayli). Asl muallif: Shimon Wosner.
