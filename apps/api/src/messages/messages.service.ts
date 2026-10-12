@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -27,6 +28,9 @@ export class MessagesService {
       country: m.country,
       isAuthenticated: m.userId != null,
       createdAt: m.createdAt,
+      replyTo: m.replyTo
+        ? { id: m.replyTo.id, username: m.replyTo.username, text: m.replyTo.text.slice(0, 120) }
+        : null,
     };
   }
 
@@ -36,6 +40,7 @@ export class MessagesService {
       where: { roomId: room.id, ...(before ? { id: { lt: before } } : {}) },
       orderBy: { id: 'desc' },
       take: limit,
+      include: { replyTo: true },
     });
     return rows.reverse().map((m) => this.shape(m));
   }
@@ -46,6 +51,7 @@ export class MessagesService {
     country: string | undefined,
     user: { sub: number; username: string } | null,
     guestName: string | undefined,
+    replyToId?: number,
   ) {
     const room = await this.room(slug);
     let username: string;
@@ -60,8 +66,18 @@ export class MessagesService {
         throw new BadRequestException('Bu ism ro\'yxatdan o\'tgan foydalanuvchiniki');
       username = guestName;
     }
+    let replyId: number | undefined;
+    if (replyToId) {
+      const target = await this.prisma.message.findFirst({
+        where: { id: replyToId, roomId: room.id },
+      });
+      if (!target) throw new BadRequestException('Javob beriladigan xabar topilmadi');
+      replyId = target.id;
+    }
     const msg = await this.prisma.message.create({
+      include: { replyTo: true },
       data: {
+        replyToId: replyId,
         text,
         username,
         country: country?.toUpperCase(),
@@ -72,5 +88,15 @@ export class MessagesService {
     const shaped = this.shape(msg);
     this.gateway.broadcast(slug, { ...shaped, room: slug });
     return shaped;
+  }
+
+  async remove(slug: string, id: number, user: { sub: number }) {
+    const room = await this.room(slug);
+    const msg = await this.prisma.message.findFirst({ where: { id, roomId: room.id } });
+    if (!msg) throw new NotFoundException('Xabar topilmadi');
+    if (msg.userId !== user.sub) throw new ForbiddenException('Faqat o\'z xabaringizni o\'chira olasiz');
+    await this.prisma.message.delete({ where: { id } });
+    this.gateway.server.to(`room:${slug}`).emit('deleted', { id, room: slug });
+    return { ok: true };
   }
 }

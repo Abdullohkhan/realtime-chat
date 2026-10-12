@@ -36,6 +36,9 @@ export const dict = {
     yesterday: "Kecha",
     back: "Orqaga",
     fromCountry: "dan",
+    reply: "Javob berish",
+    delete: "O'chirish",
+    typing: "yozmoqda...",
   },
   en: {
     appName: "Suhbat",
@@ -73,5 +76,8 @@ export const dict = {
     yesterday: "Yesterday",
     back: "Back",
     fromCountry: "from",
+    reply: "Reply",
+    delete: "Delete",
+    typing: "is typing...",
   },
 };

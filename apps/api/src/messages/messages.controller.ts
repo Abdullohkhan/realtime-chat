@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   DefaultValuePipe,
   Get,
   Param,
@@ -11,8 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsOptional, IsString, Length, Matches, MaxLength, MinLength } from 'class-validator';
-import { OptionalJwtGuard } from '../auth/jwt.guard';
+import { IsInt, IsOptional, IsString, Length, Matches, MaxLength, MinLength } from 'class-validator';
+import { JwtGuard, OptionalJwtGuard } from '../auth/jwt.guard';
 import { MessagesService } from './messages.service';
 
 class SendDto {
@@ -29,6 +30,10 @@ class SendDto {
   @IsString()
   @Length(2, 2)
   country?: string;
+
+  @IsOptional()
+  @IsInt()
+  replyToId?: number;
 }
 
 @Controller('rooms/:slug/messages')
@@ -48,6 +53,16 @@ export class MessagesController {
   @Throttle({ default: { limit: 20, ttl: 10_000 } })
   @Post()
   send(@Param('slug') slug: string, @Body() dto: SendDto, @Req() req: any) {
-    return this.messages.send(slug, dto.text.trim(), dto.country, req.user, dto.guestName);
+    return this.messages.send(slug, dto.text.trim(), dto.country, req.user, dto.guestName, dto.replyToId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete(':id')
+  remove(
+    @Param('slug') slug: string,
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
+  ) {
+    return this.messages.remove(slug, id, req.user);
   }
 }

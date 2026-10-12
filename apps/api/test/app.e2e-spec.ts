@@ -86,4 +86,35 @@ describe('Chat API', () => {
   it('xona yaratish faqat login bilan', async () => {
     await request(url).post('/rooms').send({ slug: 'test-x', title: 'T' }).expect(401);
   });
+
+  it('reply, o\'chirish va typing', async () => {
+    const first = await request(url).post('/rooms/general/messages').set('Authorization', `Bearer ${token}`).send({ text: 'asl' }).expect(201);
+    const reply = await request(url).post('/rooms/general/messages').send({ text: 'javob', guestName: 'mehmon1', replyToId: first.body.id }).expect(201);
+    expect(reply.body.replyTo).toMatchObject({ id: first.body.id, username });
+    await request(url).post('/rooms/general/messages').send({ text: 'x', guestName: 'mehmon1', replyToId: 999999 }).expect(400);
+
+    // mehmon va begona o'chira olmaydi
+    await request(url).delete(`/rooms/general/messages/${first.body.id}`).expect(401);
+    const other = await request(url).post('/auth/register').send({ email: `o${email}`, username: `o${username}`.slice(0, 15), password: 'secret123' }).expect(201);
+    await request(url).delete(`/rooms/general/messages/${first.body.id}`).set('Authorization', `Bearer ${other.body.token}`).expect(403);
+
+    // egasi o'chiradi, socket 'deleted' oladi
+    const del = new Promise<any>((r) => sock.once('deleted', r));
+    await request(url).delete(`/rooms/general/messages/${first.body.id}`).set('Authorization', `Bearer ${token}`).expect(200);
+    expect(await del).toEqual({ id: first.body.id, room: 'general' });
+    const list = await request(url).get('/rooms/general/messages?limit=100').expect(200);
+    const r = list.body.find((m: any) => m.id === reply.body.id);
+    expect(r.replyTo).toBeNull(); // asl o'chdi, javob qoladi
+
+    // typing boshqa klientga boradi
+    const s2 = io(url, { transports: ['websocket'] });
+    await new Promise<void>((res) => s2.on('connect', () => res()));
+    s2.emit('join', 'general');
+    await new Promise((res) => setTimeout(res, 200));
+    const typing = new Promise<any>((res) => s2.once('typing', res));
+    sock.emit('typing', { slug: 'general', name: username });
+    expect(await typing).toEqual({ room: 'general', name: username });
+    s2.close();
+    await app.get(PrismaService).user.deleteMany({ where: { email: `o${email}` } });
+  });
 });

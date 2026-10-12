@@ -21,6 +21,8 @@ export function AppProvider({ children }) {
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
   const [toast, setToast] = useState("");
+  const [online, setOnline] = useState(0);
+  const [typing, setTyping] = useState({}); // slug -> { name: timeoutId }
   const active = useRef(null);
   const roomsRef = useRef([]);
   const socketRef = useRef(null);
@@ -77,11 +79,11 @@ export function AppProvider({ children }) {
     return older.length;
   };
 
-  const send = async (slug, text) => {
+  const send = async (slug, text, replyToId) => {
     try {
       const m = await api(`/rooms/${slug}/messages`, {
         method: "POST",
-        body: { text, country: country || undefined, ...(user ? {} : { guestName }) },
+        body: { text, replyToId, country: country || undefined, ...(user ? {} : { guestName }) },
       });
       addMessage(slug, m);
       return true;
@@ -89,6 +91,19 @@ export function AppProvider({ children }) {
       showToast(e.network ? t("serverDown") : e.message);
       return false;
     }
+  };
+
+  const removeMessage = async (slug, id) => {
+    try { await api(`/rooms/${slug}/messages/${id}`, { method: "DELETE" }); }
+    catch (e) { showToast(e.message); }
+  };
+
+  const lastTyping = useRef(0);
+  const notifyTyping = (slug) => {
+    const now = Date.now();
+    if (now - lastTyping.current < 2000) return;
+    lastTyping.current = now;
+    socketRef.current?.emit("typing", { slug, name: username });
   };
 
   const auth = async (mode, body) => {
@@ -114,6 +129,25 @@ export function AppProvider({ children }) {
     socketRef.current = s;
     s.on("connect", () => { setConnected(true); roomsRef.current.forEach((r) => s.emit("join", r.slug)); });
     s.on("disconnect", () => setConnected(false));
+    s.on("online", setOnline);
+    s.on("deleted", ({ id, room }) => {
+      setMessages((p) => ({
+        ...p,
+        [room]: (p[room] || [])
+          .filter((m) => m.id !== id)
+          .map((m) => (m.replyTo?.id === id ? { ...m, replyTo: null } : m)),
+      }));
+    });
+    s.on("typing", ({ room, name }) => {
+      setTyping((p) => {
+        clearTimeout(p[room]?.[name]);
+        const id = setTimeout(() => setTyping((q) => {
+          const { [name]: _, ...rest } = q[room] || {};
+          return { ...q, [room]: rest };
+        }), 3000);
+        return { ...p, [room]: { ...(p[room] || {}), [name]: id } };
+      });
+    });
     s.on("message", (m) => {
       addMessage(m.room, m);
       if (m.room !== active.current || document.hidden)
@@ -138,7 +172,7 @@ export function AppProvider({ children }) {
     <Ctx.Provider value={{
       t, lang, setLang, user, username, guestName, setGuestName, country, rooms, messages, hasMore,
       unread, loading, error, connected, toast, showToast, load, openRoom, loadOlder, send,
-      auth, logout, createRoom,
+      auth, logout, createRoom, online, typing, removeMessage, notifyTyping,
     }}>
       {children}
     </Ctx.Provider>

@@ -7,7 +7,9 @@ Monorepo: **React + Vite** (frontend) va **NestJS + Prisma + PostgreSQL + Socket
 > o'zimizning NestJS API, interfeys Telegram uslubida va o'zbekchaga o'tkazilgan.
 
 ## Imkoniyatlar
-- Telegram uslubidagi UI: chatlar ro'yxati, pufakchali xabarlar, kunlar bo'yicha ajratish, qorong'i rejim, telefonda to'liq ekran
+- Telegram uslubidagi UI + "liquid glass" (shaffof, xira panellar), qorong'i rejim, telefonda to'liq ekran
+- Xabarga javob berish (reply), o'z xabarini o'chirish (hammada darhol yo'qoladi)
+- "yozmoqda..." ko'rsatkichi va onlayn foydalanuvchilar soni
 - Real-vaqt xabarlar (Socket.IO), o'qilmagan xabarlar hisoblagichi
 - Bir nechta xona (chat), login qilganlar yangi xona yarata oladi
 - Email + parol bilan ro'yxatdan o'tish (JWT, bcrypt) yoki mehmon sifatida yozish
@@ -45,6 +47,11 @@ Test (haqiqiy bazada, `DATABASE_URL` kerak): `pnpm test`
 | `CORS_ORIGIN` | api | Frontend manzili(lari), vergul bilan |
 | `PORT` | api | Standart 4000 |
 | `VITE_API_URL` | web | API manzili (build vaqtida) |
+
+## JWT_SECRET yaratish
+```bash
+openssl rand -base64 48        # Termux/Linux/Mac
+```
 
 ## Deploy (bepul variantlar)
 1. **Baza:** [Neon](https://neon.tech) yoki Railway'da PostgreSQL oching, `DATABASE_URL` ni oling.

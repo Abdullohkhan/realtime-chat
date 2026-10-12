@@ -33,6 +33,9 @@ model Message {
   room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   userId    Int?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  replyToId Int?
+  replyTo   Message? @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[] @relation("Replies")
   createdAt DateTime @default(now())
 
   @@index([roomId, id])
