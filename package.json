@@ -1,43 +1,15 @@
 {
-  "name": "realtime-chat-supabase-react",
-  "version": "0.2.0",
-  "private": false,
-  "author": "Shimon Wosner",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/shwosner/realtime-chat-supabase-react"
-  },
-  "type": "module",
-  "dependencies": {
-    "@chakra-ui/react": "^3.20.0",
-    "@emotion/react": "^11.14.0",
-    "@supabase/supabase-js": "^2.50.0",
-    "dayjs": "^1.11.13",
-    "next-themes": "^0.4.6",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-icons": "^5.5.0",
-    "react-router-dom": "^7.6.2"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.5.1",
-    "vite": "^6.3.5"
-  },
+  "name": "realtime-chat",
+  "private": true,
+  "version": "1.0.0",
+  "license": "Apache-2.0",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "pnpm --parallel -r dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api start:dev",
+    "build": "pnpm -r build",
+    "db:migrate": "pnpm --filter api prisma:migrate",
+    "test": "pnpm --filter api test"
   },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  }
+  "packageManager": "pnpm@10.28.0"
 }
