@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BiArrowBack, BiSend, BiX, BiTrash, BiReply } from "react-icons/bi";
+import { BiArrowBack, BiSend, BiX, BiTrash, BiReply, BiImageAdd } from "react-icons/bi";
 import { MdVerified } from "react-icons/md";
 import dayjs from "dayjs";
 import { useApp } from "../context/AppContext";
+import { API_URL } from "../api";
 import Avatar, { colorFor } from "./Avatar";
 
 function dayLabel(d, t) {
@@ -15,14 +16,18 @@ function dayLabel(d, t) {
 
 export default function ChatView() {
   const { slug } = useParams();
-  const { t, rooms, messages, username, user, openRoom, loadOlder, send, connected, online, typing, removeMessage, notifyTyping } = useApp();
+  const { t, rooms, messages, username, user, openRoom, loadOlder, send, sendImage, react, connected, online, typing, removeMessage, notifyTyping, showToast } = useApp();
   const room = rooms.find((r) => r.slug === slug);
   const list = messages[slug] || [];
   const [text, setText] = useState("");
   const [atBottom, setAtBottom] = useState(true);
   const [fresh, setFresh] = useState(0);
   const [replyTo, setReplyTo] = useState(null);
-  const [menu, setMenu] = useState(null); // message id with open actions
+  const [menu, setMenu] = useState(null); // { id, down } — ochiq amallar menyusi
+  const [pending, setPending] = useState(null); // { id, preview }
+  const [zoom, setZoom] = useState(null);
+  const fileRef = useRef();
+  const atBottomRef = useRef(true);
   const typers = Object.keys(typing[slug] || {}).filter((n) => n !== username);
   const box = useRef();
   const prevLen = useRef(0);
@@ -30,7 +35,7 @@ export default function ChatView() {
   const lastId = useRef(null);
 
   useEffect(() => { openRoom(slug); }, [slug]); // eslint-disable-line
-  useEffect(() => { prevLen.current = 0; lastId.current = null; setFresh(0); setReplyTo(null); setMenu(null); }, [slug]);
+  useEffect(() => { prevLen.current = 0; lastId.current = null; setFresh(0); setReplyTo(null); setMenu(null); setPending(null); }, [slug]);
 
   // Skroll: o'z xabarim yoki pastda bo'lsam -> pastga; eski xabarlar yuklansa joyni saqlash
   useLayoutEffect(() => {
@@ -52,7 +57,7 @@ export default function ChatView() {
   const onScroll = async (e) => {
     const el = e.currentTarget;
     const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    setAtBottom(bottom);
+    setAtBottom(bottom); atBottomRef.current = bottom;
     if (bottom) setFresh(0);
     if (el.scrollTop < 40 && list.length) {
       prevHeight.current = el.scrollHeight;
@@ -64,12 +69,21 @@ export default function ChatView() {
   const submit = async (e) => {
     e.preventDefault();
     const v = text.trim();
-    if (!v) return;
-    setText("");
-    const rid = replyTo?.id;
-    setReplyTo(null);
-    if (!(await send(slug, v, rid))) setText(v);
+    if (!v && !pending) return;
+    const img = pending, rid = replyTo?.id;
+    setText(""); setReplyTo(null); setPending(null);
+    if (!(await send(slug, { text: v, imageId: img?.id, replyToId: rid }))) { setText(v); setPending(img); }
   };
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return showToast(t("photo"));
+    const r = await sendImage(file);
+    if (r) setPending(r);
+  };
+  const stickBottom = () => { if (atBottomRef.current && box.current) box.current.scrollTop = box.current.scrollHeight; };
 
   if (!room) return <div className="empty-main">…</div>;
 
@@ -78,13 +92,13 @@ export default function ChatView() {
     <section className="chat">
       <header className="chat-head">
         <Link to="/" className="back" aria-label={t("back")}><BiArrowBack /></Link>
-        <Avatar name={room.title} size={40} />
+        <Avatar name={room.title} size={42} />
         <div>
           <b>{room.title}</b>
           <small className={typers.length ? "typing" : ""}>
             {!connected ? t("connecting")
               : typers.length ? `${typers.slice(0, 2).join(", ")} ${t("typing")}`
-              : `${online} ${t("online")}`}
+              : room.kind === "DIRECT" ? t("direct") : `${online} ${t("online")}`}
           </small>
         </div>
       </header>
@@ -102,10 +116,20 @@ export default function ChatView() {
               {showDay && <div className="day"><span>{dayLabel(m.createdAt, t)}</span></div>}
               <div className={`row-msg ${mine ? "mine" : ""}`}>
                 {!mine && (first ? <Avatar name={m.username} size={34} /> : <div style={{ width: 34 }} />)}
-                <div className={`bubble ${mine ? "mine" : ""} ${first ? "first" : ""} ${menu === m.id ? "open" : ""}`}
-                  onClick={() => setMenu(menu === m.id ? null : m.id)}>
-                  {menu === m.id && (
-                    <div className="actions" onClick={(e) => e.stopPropagation()}>
+                <div className={`bubble ${mine ? "mine" : ""} ${first ? "first" : ""} ${menu?.id === m.id ? "open" : ""}`}
+                  onClick={(e) => {
+                    if (menu?.id === m.id) return setMenu(null);
+                    // tepada joy kam bo'lsa menyu pastga ochiladi
+                    const room = e.currentTarget.getBoundingClientRect().top - box.current.getBoundingClientRect().top;
+                    setMenu({ id: m.id, down: room < 190 });
+                  }}>
+                  {menu?.id === m.id && (
+                    <div className={`actions ${menu.down ? "down" : ""}`} onClick={(e) => e.stopPropagation()}>
+                      <div className="emoji-row">
+                        {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((em) => (
+                          <button key={em} onClick={() => { react(slug, m.id, em); setMenu(null); }}>{em}</button>
+                        ))}
+                      </div>
                       <button onClick={() => { setReplyTo(m); setMenu(null); }}><BiReply /> {t("reply")}</button>
                       {mine && user && (
                         <button className="danger" onClick={() => { removeMessage(slug, m.id); setMenu(null); }}>
@@ -130,8 +154,22 @@ export default function ChatView() {
                       <span className="truncate">{m.replyTo.text}</span>
                     </div>
                   )}
-                  <span className="text">{m.text}</span>
+                  {m.imageUrl && (
+                    <img className="photo" src={`${API_URL}${m.imageUrl}`} alt="" loading="lazy"
+                      onLoad={stickBottom} onClick={(e) => { e.stopPropagation(); setZoom(`${API_URL}${m.imageUrl}`); }} />
+                  )}
+                  {m.text && <span className="text">{m.text}</span>}
                   <span className="time">{dayjs(m.createdAt).format("HH:mm")}</span>
+                  {m.reactions && Object.keys(m.reactions).length > 0 && (
+                    <div className="reactions" onClick={(e) => e.stopPropagation()}>
+                      {Object.entries(m.reactions).map(([em, who]) => (
+                        <button key={em} className={who.includes(username) && user ? "mine" : ""} title={who.join(", ")}
+                          onClick={() => react(slug, m.id, em)}>
+                          {em} <b>{who.length}</b>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -153,11 +191,24 @@ export default function ChatView() {
           <button type="button" className="icon-btn" onClick={() => setReplyTo(null)} aria-label={t("cancel")}><BiX /></button>
         </div>
       )}
+      {pending && (
+        <div className="reply-bar">
+          <img className="thumb" src={pending.preview} alt="" />
+          <span className="grow">{t("photo")}</span>
+          <button type="button" className="icon-btn" onClick={() => setPending(null)} aria-label={t("cancel")}><BiX /></button>
+        </div>
+      )}
       <form className="composer" onSubmit={submit} autoComplete="off">
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickImage} />
+        <button type="button" className="icon-btn attach" aria-label={t("sendPhoto")}
+          onClick={() => (user ? fileRef.current.click() : showToast(t("loginFor")))}><BiImageAdd /></button>
         <input value={text} onChange={(e) => { setText(e.target.value); if (e.target.value) notifyTyping(slug); }}
           placeholder={t("typeMessage")} maxLength={500} />
-        <button className="send" disabled={!text.trim()} aria-label={t("send")}><BiSend /></button>
+        <button className="send" disabled={!text.trim() && !pending} aria-label={t("send")}><BiSend /></button>
       </form>
+      {zoom && (
+        <div className="lightbox" onClick={() => setZoom(null)}><img src={zoom} alt="" /></div>
+      )}
     </section>
   );
 }

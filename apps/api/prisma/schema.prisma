@@ -7,36 +7,92 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum RoomKind {
+  PUBLIC
+  DIRECT
+}
+
 model User {
-  id           Int       @id @default(autoincrement())
-  email        String    @unique
-  username     String    @unique
-  passwordHash String
-  createdAt    DateTime  @default(now())
+  id           Int          @id @default(autoincrement())
+  email        String?      @unique
+  phone        String?      @unique
+  username     String       @unique
+  passwordHash String?
+  createdAt    DateTime     @default(now())
   messages     Message[]
+  memberships  RoomMember[]
+  reactions    Reaction[]
+  images       Image[]
 }
 
 model Room {
-  id        Int       @id @default(autoincrement())
-  slug      String    @unique
+  id        Int          @id @default(autoincrement())
+  slug      String       @unique
   title     String
-  createdAt DateTime  @default(now())
+  kind      RoomKind     @default(PUBLIC)
+  createdAt DateTime     @default(now())
   messages  Message[]
+  members   RoomMember[]
+}
+
+model RoomMember {
+  roomId Int
+  room   Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+  @@index([userId])
 }
 
 model Message {
-  id        Int      @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   text      String
   username  String
   country   String?
   roomId    Int
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room      Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   userId    Int?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   replyToId Int?
-  replyTo   Message? @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies   Message[] @relation("Replies")
-  createdAt DateTime @default(now())
+  replyTo   Message?   @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]  @relation("Replies")
+  imageId   String?
+  image     Image?     @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  reactions Reaction[]
+  createdAt DateTime   @default(now())
 
   @@index([roomId, id])
+}
+
+model Reaction {
+  id        Int     @id @default(autoincrement())
+  messageId Int
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+
+  @@unique([messageId, userId, emoji])
+}
+
+model Image {
+  id        String    @id @default(uuid())
+  mime      String
+  data      Bytes
+  userId    Int?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  messages  Message[]
+}
+
+model OtpRequest {
+  id        Int      @id @default(autoincrement())
+  phone     String
+  codeHash  String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt])
 }
